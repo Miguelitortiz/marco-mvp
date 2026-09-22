@@ -1,0 +1,1 @@
+"""MARCO application core."""
