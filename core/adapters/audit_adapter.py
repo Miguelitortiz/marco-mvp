@@ -5,7 +5,7 @@ from core.domain.models import AuditEvent
 
 
 class JSONLAuditAdapter:
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path = "trajectory.jsonl") -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 

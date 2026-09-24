@@ -1,0 +1,17 @@
+template: IFAC
+phases:
+  - PARAMETRIZATION
+  - CURATION
+  - DRAFTING
+  - ASSEMBLY
+budget:
+  target_words: 4000
+  target_pages: 6
+  tolerance: 0.15
+governance:
+  semantic_green: 0.75
+  semantic_red: 0.50
+  fillers:
+    - en conclusión
+    - cabe destacar
+    - es importante señalar

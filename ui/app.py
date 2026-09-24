@@ -13,6 +13,7 @@ from core.application import AuditService, DraftingService
 from core.domain.fsm import InvalidStateTransitionError, WorkflowFSM
 from core.domain.models import HumanSignature, WorkflowState
 from core.services.governance import GovernanceService
+from core.domain.configuration import load_governance_config
 from core.services.ingestion import ingest_file
 from core.services.transparency import export_report, transparency_report
 
@@ -29,10 +30,11 @@ def main() -> None:
         st.session_state.hits = []
     fsm, store = st.session_state.fsm, st.session_state.store
     project_id = st.sidebar.text_input("Proyecto", "experimento")
-    audit = AuditService(JSONLAuditAdapter(Path("data") / "audit.jsonl"), project_id)
+    config = load_governance_config(Path("governance.yaml"))
+    audit = AuditService(JSONLAuditAdapter(Path("data") / "trajectory.jsonl"), project_id)
     st.sidebar.subheader("Parametrización")
-    target_words = st.sidebar.number_input("Palabras objetivo", 50, 10000, 500)
-    tolerance = st.sidebar.slider("Tolerancia", 0.0, 1.0, 0.1)
+    target_words = st.sidebar.number_input("Palabras objetivo", 50, 10000, config.budget.target_words)
+    tolerance = st.sidebar.slider("Tolerancia", 0.0, 0.9, config.budget.tolerance)
     template = st.sidebar.text_input("Nombre de plantilla", "Sección experimental")
     current_words = len(st.session_state.text.split())
     lower_bound = int(target_words * (1 - tolerance))
@@ -62,7 +64,14 @@ def main() -> None:
         st.sidebar.success(f"{len(store.documents)} fragmentos indexados")
 
     st.caption(f"Fase actual: **{fsm.state.value}** · plantilla: {template} · tolerancia: {tolerance:.0%}")
-    editor, inspector = st.columns([2, 1])
+    editor, inspector, sources = st.tabs(["Editor", "Fuentes", "Auditoría"])
+    with sources:
+        st.subheader("Fuentes y fragmentos")
+        for hit in st.session_state.hits:
+            st.write(f"`{hit.document.document_id}` · {hit.document.metadata}")
+            if st.button(f"Inspeccionar {hit.document.document_id}", key=f"inspect-{hit.document.document_id}"):
+                audit.inspect_evidence(WorkflowState.CURATION, "HUMAN", hit.document.document_id)
+                st.info(hit.document.text)
     with inspector:
         query = st.text_input("Buscar evidencia", "método resultados")
         if st.button("Buscar") or query:
@@ -78,7 +87,10 @@ def main() -> None:
             audit.record(WorkflowState.DRAFTING, "ui", "draft_generated",
                          {"citations": [h.document.metadata for h in result.citations]},
                          input_tokens=result.input_tokens, output_tokens=result.output_tokens)
-        st.session_state.text = st.text_area("Editor", st.session_state.text, height=260)
+        edited = st.text_area("Editor", st.session_state.text, height=260)
+        if edited != st.session_state.text:
+            audit.record_human_edit(WorkflowState.DRAFTING, "HUMAN", st.session_state.text, edited)
+            st.session_state.text = edited
         current_words = len(st.session_state.text.split())
         if st.button("Ejecutar gobernanza"):
             gov = GovernanceService()
@@ -102,11 +114,33 @@ def main() -> None:
                 st.success(f"Avanzó a {next_state.value}")
             except InvalidStateTransitionError as exc:
                 st.error(str(exc))
-    report_path = Path("data") / "audit.jsonl"
+    report_path = Path("data") / "trajectory.jsonl"
     if report_path.exists():
         report = transparency_report(report_path)
-        st.subheader("Reporte de transparencia Secc. 4.6")
-        st.json(report)
+        with sources:
+            st.subheader("Reporte de transparencia Secc. 4.6")
+            st.json(report)
+            events = audit.audit_port.list_events(project_id)
+            rollback_target = st.selectbox(
+                "Retroceder a fase",
+                [WorkflowState.PARAMETRIZATION, WorkflowState.CURATION, WorkflowState.DRAFTING],
+            )
+            if events and st.button("Firmar rollback"):
+                try:
+                    signature = HumanSignature(
+                        user_id=user,
+                        decision=decision,
+                        state_hash=f"{fsm.state.value}:{len(st.session_state.text)}",
+                    )
+                    previous_state = fsm.state
+                    fsm.rollback(rollback_target, {"human_signature": signature})
+                    audit.rollback(
+                        previous_state, "HUMAN", events[-1].event_hash,
+                        f"rollback firmado hacia {rollback_target.value}",
+                    )
+                    st.success(f"Rollback aplicado: {previous_state.value} -> {rollback_target.value}")
+                except InvalidStateTransitionError as exc:
+                    st.error(str(exc))
         if st.button("Exportar reporte JSON"):
             export_report(report, Path("data") / "transparency.json")
         if st.button("Exportar reporte Markdown"):

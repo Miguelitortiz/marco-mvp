@@ -11,3 +11,7 @@ from .transparency import export_report, transparency_report
 
 __all__ = ["GovernanceService", "chunk_text", "ingest_file", "ingest_pdf",
            "transparency_report", "export_report"]
+from .budget import BudgetEnforcer, BudgetResult
+from .governance import GovernanceService
+
+__all__ = ["BudgetEnforcer", "BudgetResult", "GovernanceService"]

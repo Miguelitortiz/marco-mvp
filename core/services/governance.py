@@ -27,9 +27,24 @@ class Level2Result:
     flag: str
 
 
+@dataclass(frozen=True)
+class Level3Result:
+    signed: bool
+    signer: str | None
+    decision: str | None
+    flag: str
+
+
 class GovernanceService:
-    def __init__(self, fillers: tuple[str, ...] = DEFAULT_FILLERS) -> None:
+    def __init__(self, fillers: tuple[str, ...] = DEFAULT_FILLERS, *,
+                 semantic_green: float = 0.75, semantic_red: float = 0.50,
+                 green_threshold: float | None = None,
+                 red_threshold: float | None = None) -> None:
         self.fillers = tuple(item.lower() for item in fillers)
+        self.semantic_green = green_threshold if green_threshold is not None else semantic_green
+        self.semantic_red = red_threshold if red_threshold is not None else semantic_red
+        if not 0 <= self.semantic_red <= self.semantic_green <= 1:
+            raise ValueError("semantic thresholds must satisfy 0 <= red <= green <= 1")
 
     def level1(self, text: str) -> Level1Result:
         findings = [phrase for phrase in self.fillers if phrase in text.lower()]
@@ -56,8 +71,25 @@ class GovernanceService:
             score = max(0.0, min(1.0, (score + 1.0) / 2.0))
             rows.append({"evidence": evidence, "score": round(score, 4)})
         score = sum(float(row["score"]) for row in rows) / len(rows) if rows else 0.0
-        flag = "green" if score >= 0.82 else "yellow" if score >= 0.55 else "red"
+        flag = ("green" if score >= self.semantic_green else
+                "yellow" if score >= self.semantic_red else "red")
         return Level2Result(rows, round(score, 4), flag)
 
-    def run(self, text: str, citations: list[object] | None = None) -> dict[str, object]:
-        return {"level1": self.level1(text), "level2": self.level2(text, citations)}
+    @staticmethod
+    def level3(signature: object | None = None) -> Level3Result:
+        if signature is None:
+            return Level3Result(False, None, None, "red")
+        if isinstance(signature, dict):
+            signature = signature.get("human_signature", signature)
+            signer = signature.get("user_id") if isinstance(signature, dict) else None
+            decision = signature.get("decision") if isinstance(signature, dict) else None
+        else:
+            signer = getattr(signature, "user_id", None)
+            decision = getattr(signature, "decision", None)
+        signed = bool(signer and decision in {"ACCEPTED", "AMENDED", "REJECTED"})
+        return Level3Result(signed, signer, decision, "green" if signed else "red")
+
+    def run(self, text: str, citations: list[object] | None = None,
+            signature: object | None = None) -> dict[str, object]:
+        return {"level1": self.level1(text), "level2": self.level2(text, citations),
+                "level3": self.level3(signature)}

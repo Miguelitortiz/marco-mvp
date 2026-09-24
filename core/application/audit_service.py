@@ -46,6 +46,29 @@ class AuditService:
 
     append_event = record
 
+    def inspect_evidence(self, phase: WorkflowState, actor: str, fragment_id: str,
+                         notes: str = "") -> AuditEvent:
+        return self.record(phase, actor, "evidence_inspected",
+                           {"fragment_id": fragment_id, "notes": notes})
+
+    def record_human_edit(self, phase: WorkflowState, actor: str, before: str,
+                          after: str) -> AuditEvent:
+        return self.record(phase, actor, "human_edit",
+                           {
+                               "before_length": len(before),
+                               "after_length": len(after),
+                               "text": after,
+                               "delta_characters": len(after) - len(before),
+                           })
+
+    def rollback(self, phase: WorkflowState, actor: str, target_event_hash: str,
+                 reason: str = "") -> AuditEvent:
+        """Record a non-linear rollback; history remains append-only."""
+        if not target_event_hash:
+            raise ValueError("target_event_hash is required")
+        return self.record(phase, actor, "rollback",
+                           {"target_event_hash": target_event_hash, "reason": reason})
+
     def verify_chain(self) -> bool:
         events = self.audit_port.list_events(self.project_id)
         previous = None

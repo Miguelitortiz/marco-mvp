@@ -63,6 +63,31 @@ class WorkflowFSM:
         }
         return self.state
 
+    def rollback(
+        self,
+        target: WorkflowState,
+        payload: Mapping[str, Any] | None = None,
+    ) -> WorkflowState:
+        """Move to an earlier canonical phase after an explicit human decision."""
+        canonical_order = {
+            WorkflowState.PARAMETRIZATION: 0,
+            WorkflowState.CURATION: 1,
+            WorkflowState.DRAFTING: 2,
+            WorkflowState.ASSEMBLY: 3,
+        }
+        if not self._canonical or target not in canonical_order:
+            raise InvalidStateTransitionError(
+                "Rollback is only available inside the four canonical MARCO phases."
+            )
+        if canonical_order[target] >= canonical_order.get(self.state, -1):
+            raise InvalidStateTransitionError(
+                f"Rollback target {target.value} is not earlier than {self.state.value}."
+            )
+        self._require_signature(payload or {})
+        self.state = target
+        self._canonical = True
+        return self.state
+
     @staticmethod
     def _require_signature(payload: Mapping[str, Any]) -> HumanSignature:
         raw_signature = payload.get("human_signature")

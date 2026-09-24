@@ -14,7 +14,8 @@ def chunk_text(text: str, chunk_size: int = 800, overlap: int = 120) -> list[str
     return [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), step) if words[i:i + chunk_size]]
 
 
-def ingest_pdf(path: str | Path, *, chunk_size: int = 800, overlap: int = 120) -> list[VectorDocument]:
+def ingest_pdf(path: str | Path, *, chunk_size: int = 800, overlap: int = 120,
+               ocr_fallback: bool = False) -> list[VectorDocument]:
     source = Path(path)
     try:
         import fitz
@@ -23,7 +24,21 @@ def ingest_pdf(path: str | Path, *, chunk_size: int = 800, overlap: int = 120) -
     documents: list[VectorDocument] = []
     with fitz.open(source) as pdf:
         for page_number, page in enumerate(pdf, 1):
-            for chunk_number, text in enumerate(chunk_text(page.get_text(), chunk_size, overlap)):
+            page_text = page.get_text()
+            if not page_text.strip() and ocr_fallback:
+                try:
+                    import pytesseract
+                    from PIL import Image
+                except ImportError as exc:
+                    raise RuntimeError(
+                        "OCR opcional no instalado. Instale el extra 'ocr' "
+                        "(pytesseract, Pillow) y Tesseract en el sistema."
+                    ) from exc
+                image = Image.frombytes("RGB", [page.get_pixmap().width,
+                                                page.get_pixmap().height],
+                                        page.get_pixmap().samples)
+                page_text = pytesseract.image_to_string(image)
+            for chunk_number, text in enumerate(chunk_text(page_text, chunk_size, overlap)):
                 stable = sha256(f"{source.resolve()}|{page_number}|{chunk_number}|{text}".encode()).hexdigest()[:16]
                 documents.append(VectorDocument(
                     f"{source.stem}:{page_number}:{chunk_number}:{stable}",

@@ -13,6 +13,23 @@ def transparency_report(path: str | Path) -> dict[str, object]:
         events = [json.loads(line) for line in source.read_text(encoding="utf-8").splitlines() if line.strip()]
     phases = Counter(event.get("phase") for event in events)
     citations = sum(len(event.get("payload", {}).get("citations", [])) for event in events)
+    actors = Counter(event.get("actor") for event in events)
+    human_edits = sum(event.get("action_type") == "human_edit" for event in events)
+    rollbacks = sum(event.get("action_type") == "rollback" for event in events)
+    evidence_inspections = sum(event.get("action_type") == "evidence_inspected" for event in events)
+    alerts_attended = sum(
+        bool(event.get("payload", {}).get("alert_attended"))
+        for event in events
+    )
+    llm_words = sum(
+        len(str(event.get("payload", {}).get("text", "")).split())
+        for event in events if str(event.get("actor", "")).upper() == "LLM"
+    )
+    human_words = sum(
+        len(str(event.get("payload", {}).get("text", "")).split())
+        for event in events if str(event.get("actor", "")).upper() == "HUMAN"
+    )
+    generated_words = llm_words + human_words
     return {
         "section": "4.6",
         "events": len(events),
@@ -24,6 +41,27 @@ def transparency_report(path: str | Path) -> dict[str, object]:
         "latency_ms": sum(event.get("latency_ms") or 0 for event in events),
         "citations": citations,
         "evidence": citations,
+        "actors": dict(actors),
+        "llm_events": actors.get("llm", 0) + actors.get("LLM", 0),
+        "human_events": actors.get("human", 0) + actors.get("HUMAN", 0),
+        "llm_text_words": llm_words,
+        "human_text_words": human_words,
+        "authorship_words": {
+            "llm": llm_words,
+            "human": human_words,
+            "total": generated_words,
+        },
+        "llm_word_share": round(llm_words / generated_words, 4) if generated_words else 0.0,
+        "human_word_share": round(human_words / generated_words, 4) if generated_words else 0.0,
+        "human_edits": human_edits,
+        "reviews": sum(event.get("action_type") in {"review", "human_review"} for event in events),
+        "alerts_attended": alerts_attended,
+        "evidence_inspections": evidence_inspections,
+        "rollbacks": rollbacks,
+        "review_time_ms": sum(
+            event.get("latency_ms") or 0 for event in events
+            if event.get("actor", "").lower() == "human"
+        ),
         "chain_verified": _verify_chain(events),
     }
 
@@ -51,5 +89,10 @@ def export_report(report: dict[str, object], path: str | Path, fmt: str = "json"
     destination = Path(path)
     if fmt == "json":
         destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    elif fmt in {"markdown", "md"}:
+        lines = ["# Informe de transparencia", ""]
+        for key, value in report.items():
+            lines.append(f"- **{key.replace('_', ' ').capitalize()}**: {value}")
+        destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
     else:
-        destination.write_text("\n".join(f"- **{key}**: {value}" for key, value in report.items()), encoding="utf-8")
+        raise ValueError(f"Unsupported report format: {fmt}")

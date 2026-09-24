@@ -23,8 +23,10 @@ python -m pip install -e ".[ui]"
 El proveedor predeterminado es `MockLLMAdapter`; no descarga modelos ni hace
 llamadas de red. `HybridRAGStore` combina BM25 local con embeddings
 deterministas por hashing. OpenAI, Ollama, PyMuPDF y Streamlit son opcionales.
-La auditoría se guarda como JSONL append-only y encadena hashes para detectar
-alteraciones.
+La trayectoria forense se guarda como `trajectory.jsonl` (JSONL append-only,
+separada del contexto que pueda podarse) y encadena hashes para detectar
+alteraciones. `governance.yaml` es opcional y permite parametrizar plantilla,
+presupuesto y semáforos semánticos (por defecto verde `0.75`, rojo `0.50`).
 
 El flujo exige firma humana en `TRANSITION_GATE` y `EXPORT`. Los borradores
 respetan un presupuesto de tokens aproximado y toda evidencia recuperada queda
@@ -39,7 +41,9 @@ la barra lateral, pulse **Indexar**, busque evidencia, genere una sección con
 La auditoría JSONL puede exportarse como reporte de transparencia Secc. 4.6
 (JSON o Markdown), incluyendo eventos, fases, tokens, latencia, citas y cadena.
 
-PyMuPDF es opcional (`pip install -e ".[pdf]"`). `GrobidParser` está disponible
+PyMuPDF es opcional (`pip install -e ".[pdf]"`). Para PDFs escaneados, OCR es
+explícito y opt-in (`pip install -e ".[ocr]"`, además de Tesseract instalado);
+si se solicita sin dependencias se devuelve un error claro. `GrobidParser` está disponible
 como adaptador opt-in para instalaciones locales de Grobid; requiere que el
 servicio esté activo y nunca se invoca implícitamente. Sin PyMuPDF se pueden
 usar textos planos.

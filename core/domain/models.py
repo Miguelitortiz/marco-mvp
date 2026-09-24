@@ -41,3 +41,9 @@ class AuditEvent(BaseModel):
     latency_ms: float | None = 0.0
     previous_event_hash: str | None = None
     event_hash: str = Field(min_length=1)
+
+
+class EvidenceInspection(BaseModel):
+    fragment_id: str
+    inspected_by: str
+    notes: str = ""
