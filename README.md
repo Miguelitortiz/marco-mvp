@@ -12,6 +12,14 @@ pytest
 streamlit run ui/app.py  # opcional: pip install -e ".[ui]"
 ```
 
+El comando anterior funciona directamente desde el checkout. Si Streamlit
+reporta `ModuleNotFoundError: No module named 'core'`, confirma que estás en
+la raíz del repositorio (`cd marco-mvp`) o instala el proyecto en modo editable:
+
+```powershell
+python -m pip install -e ".[ui]"
+```
+
 El proveedor predeterminado es `MockLLMAdapter`; no descarga modelos ni hace
 llamadas de red. `HybridRAGStore` combina BM25 local con embeddings
 deterministas por hashing. OpenAI, Ollama, PyMuPDF y Streamlit son opcionales.

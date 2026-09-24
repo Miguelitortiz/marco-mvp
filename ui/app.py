@@ -1,5 +1,12 @@
 """Real local Streamlit workbench; all optional imports stay behind UI actions."""
 from pathlib import Path
+import sys
+
+# ``streamlit run ui/app.py`` places ``ui`` first on sys.path. Add the
+# repository root so the source checkout works without an editable install.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.adapters import HybridRAGStore, JSONLAuditAdapter, MockLLMAdapter
 from core.application import AuditService, DraftingService
