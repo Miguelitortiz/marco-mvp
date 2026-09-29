@@ -4,10 +4,50 @@
   <span class="muted">{{ workbench.current_words }} palabras</span>
 {% endblock %}
 {% block content %}
+<nav class="stepper" aria-label="Progreso del expediente">
+  {% for phase, label, description in phases %}
+    <div class="stepper__item {% if forloop.counter0 == current_phase_index %}is-current{% elif forloop.counter0 < current_phase_index %}is-complete{% endif %}">
+      {% if forloop.counter0 < current_phase_index %}
+        <form hx-post="{% url 'rollback_workflow' %}" hx-target="#workflow-status">
+          {% csrf_token %}
+          <input type="hidden" name="target" value="{{ phase.value }}">
+          <button class="stepper__button" type="submit" title="Volver a {{ label }}">
+            <span class="stepper__number">✓</span><span>{{ label }}</span>
+          </button>
+        </form>
+      {% else %}
+        <span class="stepper__button">
+          <span class="stepper__number">{{ forloop.counter }}</span><span>{{ label }}</span>
+        </span>
+      {% endif %}
+      {% if not forloop.last %}<span class="stepper__line"></span>{% endif %}
+    </div>
+  {% endfor %}
+</nav>
+
 <section class="intro">
-  <p class="eyebrow">EXPEDIENTE CIENTÍFICO · {{ workbench.project_id }}</p>
-  <h1>Escribe con evidencia.<br><em>Revisa con criterio.</em></h1>
-  <p class="intro__copy">El editor es el centro del trabajo. Las fuentes, los controles y la firma aparecen cuando los necesitas.</p>
+  <p class="eyebrow">PASO {{ current_phase_number }} DE {{ phases|length }} · {{ workbench.project_id }}</p>
+  <h1>{% if workbench.fsm.state.value == "PARAMETRIZATION" %}Prepara tu expediente.{% elif workbench.fsm.state.value == "CURATION" %}Construye tu base de evidencia.{% elif workbench.fsm.state.value == "DRAFTING" %}Redacta con respaldo.{% else %}Cierra un expediente auditable.{% endif %}</h1>
+  <p class="intro__copy">Avanza paso a paso. Escribe con evidencia cuando llegues a Redactar; cada etapa conserva lo que hiciste y puedes regresar a una etapa anterior cuando necesites corregir una decisión.</p>
+</section>
+
+<section class="guide-card">
+  <div>
+    <span class="guide-card__step">Ahora estás en {{ workbench.fsm.state.value }}</span>
+    <h2>{% for phase, label, description in phases %}{% if phase == workbench.fsm.state %}{{ label }}{% endif %}{% endfor %}</h2>
+    <p>{% for phase, label, description in phases %}{% if phase == workbench.fsm.state %}{{ description }}{% endif %}{% endfor %}</p>
+  </div>
+  <div class="guide-card__actions">
+    {% if workbench.fsm.state.value == "PARAMETRIZATION" %}
+      <span class="guide-card__hint">Completa la configuración y firma para habilitar Curar.</span>
+    {% elif workbench.fsm.state.value == "CURATION" %}
+      <span class="guide-card__hint">Indexa documentos, busca y registra al menos una inspección.</span>
+    {% elif workbench.fsm.state.value == "DRAFTING" %}
+      <span class="guide-card__hint">Genera, edita y ejecuta los controles antes de ensamblar.</span>
+    {% else %}
+      <span class="guide-card__hint">Revisa el expediente y firma el cierre auditable.</span>
+    {% endif %}
+  </div>
 </section>
 
 <section class="workspace-grid">

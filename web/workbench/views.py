@@ -63,9 +63,15 @@ class Workbench:
     def context(self) -> dict[str, object]:
         lower = int(self.target_words * (1 - self.tolerance))
         upper = int(self.target_words * (1 + self.tolerance))
+        current_index = next(
+            (index for index, (phase, _, _) in enumerate(PHASES)
+             if phase is self.fsm.state), 0,
+        )
         return {
             "workbench": self,
             "phases": PHASES,
+            "current_phase_index": current_index,
+            "current_phase_number": current_index + 1,
             "lower_bound": lower,
             "upper_bound": upper,
             "inspected_fragments": self.inspected_fragments,
