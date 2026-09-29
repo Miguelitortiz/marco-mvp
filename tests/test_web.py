@@ -14,6 +14,7 @@ import django
 django.setup()
 
 from django.test import Client
+from django.contrib.staticfiles import finders
 
 
 @pytest.fixture
@@ -27,6 +28,18 @@ def test_native_web_editor_renders(client):
     assert response.status_code == 200
     assert "Escribe con evidencia" in response.content.decode()
     assert b"hx-post" in response.content
+
+
+def test_static_assets_are_discoverable():
+    assert finders.find("workbench.css")
+    assert finders.find("favicon.svg")
+
+
+def test_legacy_favicon_path_redirects_to_static_icon(client):
+    response = client.get("/favicon.ico")
+
+    assert response.status_code == 302
+    assert response["Location"] == "/static/favicon.svg"
 
 
 def test_native_web_can_generate_and_save_draft(client, tmp_path, monkeypatch):
