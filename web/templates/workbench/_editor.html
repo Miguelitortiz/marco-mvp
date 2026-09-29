@@ -1,0 +1,23 @@
+<div id="editor-panel">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  <form id="draft-form" class="draft-controls" hx-post="{% url 'generate_draft' %}" hx-target="#editor-panel">
+    {% csrf_token %}
+    <label class="label">Qué quieres construir</label>
+    <textarea name="instruction" class="prompt" rows="3">Redacta una sección basada en la evidencia.</textarea>
+    <div class="draft-controls__row">
+      <input name="provider" type="hidden" value="{{ workbench.provider }}">
+      <input name="model" type="hidden" value="{{ workbench.model }}">
+      <input name="base_url" type="hidden" value="{{ workbench.base_url }}">
+      <button class="button button--dark" type="submit">Generar borrador <span>Ctrl + Enter</span></button>
+      <span class="muted">Basado en {{ workbench.hits|length }} evidencias</span>
+    </div>
+  </form>
+  <form class="writing-surface" hx-post="{% url 'save_text' %}" hx-target="#save-status">
+    {% csrf_token %}
+    <textarea name="text" aria-label="Texto de trabajo" placeholder="Tu texto aparecerá aquí...">{{ workbench.text }}</textarea>
+    <div class="writing-surface__footer">
+      <span id="save-status" class="muted">Guardado local · {{ workbench.current_words }} palabras</span>
+      <button class="button button--quiet" type="submit">Guardar cambios</button>
+    </div>
+  </form>
+</div>
