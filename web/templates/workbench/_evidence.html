@@ -6,6 +6,15 @@
     <article class="evidence-item">
       <div class="evidence-item__meta">{{ hit.document.document_id }} · {{ hit.score|floatformat:3 }}</div>
       <p>{{ hit.document.text|truncatewords:35 }}</p>
+      {% if hit.document.document_id in inspected_fragments %}
+        <small class="muted">Inspeccionada por la persona</small>
+      {% else %}
+        <form hx-post="{% url 'inspect_evidence' %}" hx-target="#evidence-panel">
+          {% csrf_token %}
+          <input type="hidden" name="fragment_id" value="{{ hit.document.document_id }}">
+          <button class="button button--quiet" type="submit">Abrir y registrar inspección</button>
+        </form>
+      {% endif %}
     </article>
   {% endfor %}
 {% else %}

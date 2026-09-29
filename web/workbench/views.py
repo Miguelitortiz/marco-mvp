@@ -45,6 +45,8 @@ class Workbench:
     base_url: str = ""
     api_key: str = ""
     last_governance: tuple[object, object] | None = None
+    inspected_fragments: set[str] = field(default_factory=set)
+    parametrized: bool = False
 
     @property
     def project_id(self) -> str:
@@ -66,6 +68,7 @@ class Workbench:
             "phases": PHASES,
             "lower_bound": lower,
             "upper_bound": upper,
+            "inspected_fragments": self.inspected_fragments,
             "providers": ["Mock (offline)", *PROVIDER_PRESETS],
             "report": transparency_report(Path("data") / "trajectory.jsonl")
             if Path("data") .joinpath("trajectory.jsonl").exists() else None,
@@ -93,6 +96,19 @@ def search_evidence(request: HttpRequest) -> HttpResponse:
     workbench = _state(request)
     workbench.query = request.POST.get("query", "").strip()
     workbench.hits = workbench.store.search(workbench.query, top_k=5) if workbench.query else []
+    return _fragment(request, "workbench/_evidence.html", workbench.context())
+
+
+@require_POST
+def inspect_evidence(request: HttpRequest) -> HttpResponse:
+    workbench = _state(request)
+    fragment_id = request.POST.get("fragment_id", "").strip()
+    if fragment_id:
+        workbench.inspected_fragments.add(fragment_id)
+        workbench.audit.inspect_evidence(
+            WorkflowState.CURATION, "HUMAN", fragment_id,
+            request.POST.get("notes", "").strip(),
+        )
     return _fragment(request, "workbench/_evidence.html", workbench.context())
 
 
@@ -125,6 +141,23 @@ def upload_documents(request: HttpRequest) -> HttpResponse:
 def generate_draft(request: HttpRequest) -> HttpResponse:
     workbench = _state(request)
     instruction = request.POST.get("instruction", "").strip()
+    # Keep the service endpoint usable for API clients; the browser workflow
+    # is enforced through its HTMX requests and phase controls.
+    enforce_workflow = request.headers.get("HX-Request") == "true"
+    if enforce_workflow and workbench.fsm.state is not WorkflowState.DRAFTING:
+        return _fragment(
+            request, "workbench/_editor.html",
+            {**workbench.context(),
+             "message": "La redacción está bloqueada hasta aprobar Parametrización y Curaduría."},
+        )
+    if enforce_workflow and (not workbench.hits or not workbench.inspected_fragments.intersection(
+        hit.document.document_id for hit in workbench.hits
+    )):
+        return _fragment(
+            request, "workbench/_editor.html",
+            {**workbench.context(),
+             "message": "Inspecciona al menos una evidencia recuperada antes de redactar."},
+        )
     try:
         llm = create_llm_adapter(
             workbench.provider, model=workbench.model, api_key=workbench.api_key,
@@ -162,6 +195,12 @@ def save_settings(request: HttpRequest) -> HttpResponse:
     workbench.model = request.POST.get("model", "").strip() or preset.get("model", "")
     workbench.base_url = request.POST.get("base_url", "").strip() or preset.get("base_url", "")
     workbench.api_key = request.POST.get("api_key", "").strip()
+    workbench.parametrized = True
+    workbench.audit.record(
+        WorkflowState.PARAMETRIZATION, "HUMAN", "constraints_configured",
+        {"template": workbench.template, "target_words": workbench.target_words,
+         "tolerance": workbench.tolerance},
+    )
     return _fragment(
         request, "workbench/_editor.html",
         {**workbench.context(), "message": "Configuración guardada para esta sesión."},
@@ -188,6 +227,13 @@ def run_governance(request: HttpRequest) -> HttpResponse:
     workbench.last_governance = (
         gov.level1(workbench.text), gov.level2(workbench.text, workbench.hits),
     )
+    workbench.audit.record(
+        WorkflowState.HUMAN_REVIEW, "SYSTEM", "governance_checked",
+        {"level1_findings": workbench.last_governance[0].findings,
+         "level1_score": workbench.last_governance[0].score,
+         "level2_score": workbench.last_governance[1].score,
+         "level2_flag": workbench.last_governance[1].flag},
+    )
     return _fragment(request, "workbench/_governance.html", {"workbench": workbench})
 
 
@@ -211,6 +257,26 @@ def advance_workflow(request: HttpRequest) -> HttpResponse:
     message = "El expediente ya está en ensamblaje."
     if target:
         try:
+            if workbench.fsm.state is WorkflowState.PARAMETRIZATION and not workbench.parametrized:
+                raise InvalidStateTransitionError(
+                    "Configura las restricciones del expediente antes de continuar."
+                )
+            if workbench.fsm.state is WorkflowState.CURATION:
+                if not workbench.store.documents:
+                    raise InvalidStateTransitionError(
+                        "Indexa el corpus antes de aprobar la Curaduría."
+                    )
+                if not workbench.inspected_fragments:
+                    raise InvalidStateTransitionError(
+                        "Inspecciona al menos una evidencia antes de aprobar la Curaduría."
+                    )
+            if workbench.fsm.state is WorkflowState.DRAFTING:
+                if not workbench.text.strip():
+                    raise InvalidStateTransitionError("Guarda un borrador antes de ensamblar.")
+                if workbench.last_governance is None:
+                    raise InvalidStateTransitionError(
+                        "Ejecuta los tres niveles de gobernanza antes de ensamblar."
+                    )
             signature = _signature(request)
             workbench.fsm.transition(target, {"human_signature": signature})
             workbench.audit.record(
@@ -220,6 +286,23 @@ def advance_workflow(request: HttpRequest) -> HttpResponse:
             message = f"Avance firmado: {target.value}."
         except InvalidStateTransitionError as exc:
             message = str(exc)
+    return _fragment(request, "workbench/_status.html", {**workbench.context(), "message": message})
+
+
+@require_POST
+def export_workflow(request: HttpRequest) -> HttpResponse:
+    workbench = _state(request)
+    if workbench.fsm.state is not WorkflowState.ASSEMBLY:
+        message = "El expediente debe estar en Ensamblaje antes de exportar."
+    elif not workbench.last_governance:
+        message = "Falta la revisión de gobernanza antes de exportar."
+    else:
+        report = transparency_report(Path("data") / "trajectory.jsonl")
+        workbench.audit.record(
+            WorkflowState.ASSEMBLY, "HUMAN", "exported",
+            {"events": report.get("events", 0), "word_count": workbench.current_words},
+        )
+        message = "Expediente ensamblado y reporte de transparencia registrado."
     return _fragment(request, "workbench/_status.html", {**workbench.context(), "message": message})
 
 
