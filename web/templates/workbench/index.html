@@ -68,6 +68,11 @@
           <input type="hidden" name="target" value="CURATION">
           <button class="button button--quiet" type="submit">Solicitar rollback a Curar</button>
         </form>
+        <form hx-post="{% url 'export_workflow' %}" hx-target="#workflow-status">
+          {% csrf_token %}
+          <button class="button button--dark" type="submit">Cerrar y exportar expediente</button>
+        </form>
+        <div id="workflow-status"></div>
       </div>
     </details>
   </aside>

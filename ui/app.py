@@ -84,6 +84,7 @@ def _initialise(st) -> None:
         st.session_state.text = ""
         st.session_state.hits = []
         st.session_state.last_governance = None
+        st.session_state.inspected_fragments = set()
 
 
 def _render_phase_rail(st, current: WorkflowState) -> None:
@@ -187,21 +188,30 @@ def main() -> None:
             height=90,
         )
         if st.button(f"Generar borrador · {provider}", type="primary"):
-            try:
-                llm = create_llm_adapter(provider, model=model, api_key=api_key, base_url=base_url)
-                result = DraftingService(llm, store, budget_tokens=int(target_words)).draft(
-                    instruction, query=st.session_state.get("query", "")
-                )
-                st.session_state.text = result.text
-                audit.record(
-                    WorkflowState.DRAFTING, "LLM", "draft_generated",
-                    {"provider": provider, "model": model, "text": result.text,
-                     "citations": [h.document.metadata for h in result.citations]},
-                    input_tokens=result.input_tokens, output_tokens=result.output_tokens,
-                )
-                st.success("Borrador generado y guardado en el expediente.")
-            except (RuntimeError, ValueError) as exc:
-                st.error(str(exc))
+            if fsm.state is not WorkflowState.DRAFTING:
+                st.warning("Aprueba Parametrización y Curaduría antes de redactar.")
+            elif not st.session_state.hits or not st.session_state.inspected_fragments.intersection(
+                hit.document.document_id for hit in st.session_state.hits
+            ):
+                st.warning("Inspecciona al menos una evidencia recuperada antes de redactar.")
+            else:
+                try:
+                    llm = create_llm_adapter(
+                        provider, model=model, api_key=api_key, base_url=base_url
+                    )
+                    result = DraftingService(llm, store, budget_tokens=int(target_words)).draft(
+                        instruction, query=st.session_state.get("query", "")
+                    )
+                    st.session_state.text = result.text
+                    audit.record(
+                        WorkflowState.DRAFTING, "LLM", "draft_generated",
+                        {"provider": provider, "model": model, "text": result.text,
+                         "citations": [h.document.metadata for h in result.citations]},
+                        input_tokens=result.input_tokens, output_tokens=result.output_tokens,
+                    )
+                    st.success("Borrador generado y guardado en el expediente.")
+                except (RuntimeError, ValueError) as exc:
+                    st.error(str(exc))
         edited = st.text_area("Texto de trabajo", st.session_state.text, height=300)
         if edited != st.session_state.text:
             audit.record_human_edit(WorkflowState.DRAFTING, "HUMAN", st.session_state.text, edited)
@@ -248,6 +258,7 @@ def main() -> None:
                 st.write(hit.document.text)
                 if st.button("Registrar inspección", key=f"inspect-{hit.document.document_id}"):
                     audit.inspect_evidence(WorkflowState.CURATION, "HUMAN", hit.document.document_id)
+                    st.session_state.inspected_fragments.add(hit.document.document_id)
                     st.success("Inspección registrada en la trayectoria.")
 
     with record:
@@ -287,6 +298,22 @@ def main() -> None:
         action.success("El expediente está en fase de ensamblaje.")
     elif action.button(f"Firmar y avanzar a {_phase_name(next_phase)}", type="primary"):
         try:
+            if fsm.state is WorkflowState.PARAMETRIZATION and not template.strip():
+                raise InvalidStateTransitionError("Define la plantilla antes de continuar.")
+            if fsm.state is WorkflowState.CURATION:
+                if not store.documents:
+                    raise InvalidStateTransitionError("Indexa el corpus antes de aprobar la Curaduría.")
+                if not st.session_state.inspected_fragments:
+                    raise InvalidStateTransitionError(
+                        "Inspecciona al menos una evidencia antes de aprobar la Curaduría."
+                    )
+            if fsm.state is WorkflowState.DRAFTING:
+                if not st.session_state.text.strip():
+                    raise InvalidStateTransitionError("Guarda un borrador antes de ensamblar.")
+                if st.session_state.last_governance is None:
+                    raise InvalidStateTransitionError(
+                        "Ejecuta los controles de gobernanza antes de ensamblar."
+                    )
             signature = HumanSignature(
                 user_id=signer, decision=decision_value,
                 state_hash=f"{fsm.state.value}:{len(st.session_state.text)}",
