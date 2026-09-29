@@ -4,129 +4,77 @@
   <span class="muted">{{ workbench.current_words }} palabras</span>
 {% endblock %}
 {% block content %}
-<nav class="stepper" aria-label="Progreso del expediente">
-  {% for phase, label, description in phases %}
-    <div class="stepper__item {% if forloop.counter0 == current_phase_index %}is-current{% elif forloop.counter0 < current_phase_index %}is-complete{% endif %}">
-      {% if forloop.counter0 < current_phase_index %}
-        <form hx-post="{% url 'rollback_workflow' %}" hx-target="#workflow-status">
-          {% csrf_token %}
-          <input type="hidden" name="target" value="{{ phase.value }}">
-          <button class="stepper__button" type="submit" title="Volver a {{ label }}">
-            <span class="stepper__number">✓</span><span>{{ label }}</span>
-          </button>
-        </form>
-      {% else %}
-        <span class="stepper__button">
-          <span class="stepper__number">{{ forloop.counter }}</span><span>{{ label }}</span>
-        </span>
-      {% endif %}
-      {% if not forloop.last %}<span class="stepper__line"></span>{% endif %}
-    </div>
-  {% endfor %}
-</nav>
-
 <section class="intro">
-  <p class="eyebrow">PASO {{ current_phase_number }} DE {{ phases|length }} · {{ workbench.project_id }}</p>
-  <h1>{% if workbench.fsm.state.value == "PARAMETRIZATION" %}Prepara tu expediente.{% elif workbench.fsm.state.value == "CURATION" %}Construye tu base de evidencia.{% elif workbench.fsm.state.value == "DRAFTING" %}Redacta con respaldo.{% else %}Cierra un expediente auditable.{% endif %}</h1>
-  <p class="intro__copy">Avanza paso a paso. Escribe con evidencia cuando llegues a Redactar; cada etapa conserva lo que hiciste y puedes regresar a una etapa anterior cuando necesites corregir una decisión.</p>
-</section>
-
-<section class="guide-card">
-  <div>
-    <span class="guide-card__step">Ahora estás en {{ workbench.fsm.state.value }}</span>
-    <h2>{% for phase, label, description in phases %}{% if phase == workbench.fsm.state %}{{ label }}{% endif %}{% endfor %}</h2>
-    <p>{% for phase, label, description in phases %}{% if phase == workbench.fsm.state %}{{ description }}{% endif %}{% endfor %}</p>
-  </div>
-  <div class="guide-card__actions">
-    {% if workbench.fsm.state.value == "PARAMETRIZATION" %}
-      <span class="guide-card__hint">Completa la configuración y firma para habilitar Curar.</span>
-    {% elif workbench.fsm.state.value == "CURATION" %}
-      <span class="guide-card__hint">Indexa documentos, busca y registra al menos una inspección.</span>
-    {% elif workbench.fsm.state.value == "DRAFTING" %}
-      <span class="guide-card__hint">Genera, edita y ejecuta los controles antes de ensamblar.</span>
-    {% else %}
-      <span class="guide-card__hint">Revisa el expediente y firma el cierre auditable.</span>
-    {% endif %}
-  </div>
+  <p class="eyebrow">EXPEDIENTE CIENTÍFICO · {{ workbench.project_id }}</p>
+  <h1>Escribe con evidencia.<br><em>Revisa con criterio.</em></h1>
+  <p class="intro__copy">El editor es el centro del trabajo. Las fuentes, los controles y la firma aparecen cuando los necesitas.</p>
 </section>
 
 <section class="workspace-grid">
-  {% if workbench.fsm.state.value == "PARAMETRIZATION" %}
-    <article class="stage-card stage-card--wide">
-      <div class="stage-card__heading">
-        <span class="eyebrow">Paso 1 · Preparar</span>
-        <h2>Define las reglas del documento</h2>
-        <p>Estas restricciones permanecerán activas durante todo el expediente.</p>
+  <article class="editor-column">
+    {% include "workbench/_editor.html" %}
+    {% include "workbench/_governance.html" %}
+  </article>
+  <aside class="context-column">
+    <details open class="panel">
+      <summary>Evidencia <span class="count">{{ workbench.hits|length }}</span></summary>
+      <div class="panel__body">
+        <form hx-post="{% url 'upload_documents' %}" hx-target="#evidence-panel" hx-encoding="multipart/form-data">
+          {% csrf_token %}
+          <label class="file-drop" for="documents">Añade PDF o texto</label>
+          <input id="documents" name="documents" type="file" multiple accept=".pdf,.txt">
+          <button class="button button--quiet" type="submit">Indexar documentos</button>
+        </form>
+        <form class="search" hx-post="{% url 'search_evidence' %}" hx-target="#evidence-panel">
+          {% csrf_token %}
+          <input name="query" value="{{ workbench.query }}" placeholder="Buscar evidencia">
+          <button aria-label="Buscar" type="submit">↗</button>
+        </form>
+        <div id="evidence-panel">{% include "workbench/_evidence.html" %}</div>
       </div>
-      <form class="settings stage-form" hx-post="{% url 'save_settings' %}" hx-target="#workflow-status">
-        {% csrf_token %}
-        <label>Plantilla o sección<input name="template" value="{{ workbench.template }}"></label>
-        <label>Palabras objetivo<input name="target_words" type="number" value="{{ workbench.target_words }}" min="50"></label>
-        <label>Proveedor
-          <select name="provider">{% for provider in providers %}<option {% if provider == workbench.provider %}selected{% endif %}>{{ provider }}</option>{% endfor %}</select>
-        </label>
-        <label>Modelo<input name="model" value="{{ workbench.model }}" placeholder="Predeterminado"></label>
-        <label>Endpoint<input name="base_url" value="{{ workbench.base_url }}" placeholder="Predeterminado"></label>
-        {% if workbench.provider != "Mock (offline)" and workbench.provider != "Local (Ollama)" and workbench.provider != "Local (LM Studio)" %}
-          <label>API key<input name="api_key" type="password" placeholder="Solo para esta sesión"></label>
-        {% endif %}
-        <button class="button button--dark" type="submit">Guardar reglas</button>
-      </form>
-    </article>
-  {% elif workbench.fsm.state.value == "CURATION" %}
-    <article class="stage-card stage-card--wide" id="stage-content">
-      <div class="stage-card__heading">
-        <span class="eyebrow">Paso 2 · Curar</span>
-        <h2>Reúne y valida tu evidencia</h2>
-        <p>Indexa el corpus, busca fragmentos relevantes y registra la inspección humana de al menos una fuente.</p>
+    </details>
+    <details class="panel">
+      <summary>Configuración</summary>
+      <div class="panel__body">
+        <form class="settings" hx-post="{% url 'save_settings' %}" hx-target="#editor-panel">
+          {% csrf_token %}
+          <label>Sección<input name="template" value="{{ workbench.template }}"></label>
+          <label>Palabras objetivo<input name="target_words" type="number" value="{{ workbench.target_words }}" min="50"></label>
+          <label>Proveedor
+            <select name="provider">
+              {% for provider in providers %}<option {% if provider == workbench.provider %}selected{% endif %}>{{ provider }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>Modelo<input name="model" value="{{ workbench.model }}" placeholder="Predeterminado"></label>
+          <label>Endpoint<input name="base_url" value="{{ workbench.base_url }}" placeholder="Predeterminado"></label>
+          {% if workbench.provider != "Mock (offline)" and workbench.provider != "Local (Ollama)" and workbench.provider != "Local (LM Studio)" %}
+            <label>API key<input name="api_key" type="password" placeholder="Solo para esta sesión"></label>
+          {% endif %}
+          <button class="button button--quiet" type="submit">Guardar configuración</button>
+        </form>
       </div>
-      <form hx-post="{% url 'upload_documents' %}" hx-target="#stage-content" hx-encoding="multipart/form-data">
-        {% csrf_token %}<label class="file-drop" for="documents">Añade PDF o texto</label>
-        <input id="documents" name="documents" type="file" multiple accept=".pdf,.txt">
-        <button class="button button--quiet" type="submit">Indexar documentos</button>
-      </form>
-      <form class="search" hx-post="{% url 'search_evidence' %}" hx-target="#evidence-panel">
-        {% csrf_token %}<input name="query" value="{{ workbench.query }}" placeholder="Buscar en el corpus">
-        <button aria-label="Buscar" type="submit">↗</button>
-      </form>
-      <div id="evidence-panel">{% include "workbench/_evidence.html" %}</div>
-    </article>
-  {% elif workbench.fsm.state.value == "DRAFTING" %}
-    <article class="editor-column stage-card stage-card--wide">
-      <div class="stage-card__heading">
-        <span class="eyebrow">Paso 3 · Redactar</span>
-        <h2>Construye y revisa el texto</h2>
-        <p>El borrador se genera únicamente con la evidencia que ya inspeccionaste.</p>
+    </details>
+    <details class="panel">
+      <summary>Revisión y firma</summary>
+      <div class="panel__body">
+        <form hx-post="{% url 'advance_workflow' %}" hx-target="#workflow-status">
+          {% csrf_token %}
+          <label>Firma<input name="signer" value="investigador"></label>
+          <label>Decisión<select name="decision"><option>ACCEPTED</option><option>AMENDED</option><option>REJECTED</option></select></label>
+          <button class="button button--dark" type="submit">Firmar y avanzar</button>
+        </form>
+        <form hx-post="{% url 'rollback_workflow' %}" hx-target="#workflow-status" class="rollback">
+          {% csrf_token %}
+          <input type="hidden" name="target" value="CURATION">
+          <button class="button button--quiet" type="submit">Solicitar rollback a Curar</button>
+        </form>
+        <form hx-post="{% url 'export_workflow' %}" hx-target="#workflow-status">
+          {% csrf_token %}
+          <button class="button button--dark" type="submit">Cerrar y exportar expediente</button>
+        </form>
+        <div id="workflow-status"></div>
       </div>
-      {% include "workbench/_editor.html" %}
-      {% include "workbench/_governance.html" %}
-    </article>
-  {% else %}
-    <article class="stage-card stage-card--wide">
-      <div class="stage-card__heading">
-        <span class="eyebrow">Paso 4 · Ensamblar</span>
-        <h2>El expediente está listo para cerrar</h2>
-        <p>La trayectoria, las fuentes y las decisiones humanas quedan reunidas en el reporte de transparencia.</p>
-      </div>
-      <dl class="assembly-summary">
-        <div><dt>Palabras redactadas</dt><dd>{{ workbench.current_words }}</dd></div>
-        <div><dt>Evidencias inspeccionadas</dt><dd>{{ workbench.inspected_fragments|length }}</dd></div>
-        <div><dt>Controles ejecutados</dt><dd>Sí</dd></div>
-      </dl>
-      <form hx-post="{% url 'export_workflow' %}" hx-target="#workflow-status">
-        {% csrf_token %}<button class="button button--dark" type="submit">Cerrar y exportar expediente</button>
-      </form>
-    </article>
-  {% endif %}
-</section>
-<section class="stage-footer" id="workflow-status">
-  {% if workbench.fsm.state.value != "ASSEMBLY" %}
-    <form hx-post="{% url 'advance_workflow' %}" hx-target="#workflow-status">
-      {% csrf_token %}
-      <label>Firma de esta etapa<input name="signer" value="investigador"></label>
-      <label>Decisión<select name="decision"><option>ACCEPTED</option><option>AMENDED</option><option>REJECTED</option></select></label>
-      <button class="button button--dark" type="submit">Firmar y continuar</button>
-    </form>
-  {% endif %}
+    </details>
+  </aside>
 </section>
 {% endblock %}
