@@ -2,6 +2,7 @@ from core.adapters import HybridRAGStore, JSONLAuditAdapter, MockLLMAdapter
 from core.application import AuditService, DiffService, DraftingService
 from core.domain.models import WorkflowState
 from core.ports.vector_store import VectorDocument
+from core.adapters.llm_adapters import MockLLMAdapter, create_llm_adapter
 
 
 def test_audit_chain_and_diff(tmp_path):
@@ -22,3 +23,13 @@ def test_deterministic_rag_and_budget():
         "Summarize", query="solar"
     )
     assert draft.citations and draft.text
+
+
+def test_model_factory_keeps_offline_mode_and_supports_generic_presets():
+    assert isinstance(create_llm_adapter("Mock (offline)", model=""), MockLLMAdapter)
+    adapter = create_llm_adapter(
+        "DeepSeek", model="deepseek-chat", api_key="test-key",
+        base_url="http://localhost:9999/v1",
+    )
+    assert adapter.model == "deepseek-chat"
+    assert adapter.base_url == "http://localhost:9999/v1"

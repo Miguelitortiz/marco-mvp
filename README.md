@@ -50,3 +50,27 @@ usar textos planos.
 No hay llamadas de red implícitas: el proveedor predeterminado es MockLLM y
 las representaciones vectoriales son deterministas. El corpus real de 18
 papers se proporciona externamente y no se incluye en este MVP.
+
+## Cambiar de modelo
+
+En la barra lateral, en **Modelo de redacción**, selecciona un proveedor,
+modelo y API key. La aplicación incluye presets para OpenAI, DeepSeek, Google
+Gemini, OpenRouter, Groq, LM Studio y Ollama. Los proveedores de nube usan un
+adaptador genérico del contrato OpenAI-compatible (`/v1/chat/completions`),
+por lo que también puedes introducir cualquier gateway compatible cambiando el
+endpoint. La API key solo se usa en memoria durante la sesión y no se escribe
+en `trajectory.jsonl`.
+
+Ejemplos:
+
+| Proveedor | Endpoint | Modelo de ejemplo |
+|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` |
+| Local Ollama | `http://localhost:11434` | `llama3.2` |
+| Local LM Studio | `http://localhost:1234/v1` | `local-model` |
+
+Para Ollama, instala Ollama y ejecuta `ollama pull llama3.2`. Para LM Studio,
+inicia su servidor local. Para proveedores remotos, pega la API key en la
+barra lateral. Si no quieres configurar nada, usa `Mock (offline)`.

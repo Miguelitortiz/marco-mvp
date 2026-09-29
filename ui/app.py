@@ -8,7 +8,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.adapters import HybridRAGStore, JSONLAuditAdapter, MockLLMAdapter
+from core.adapters import (
+    HybridRAGStore, JSONLAuditAdapter, PROVIDER_PRESETS, create_llm_adapter,
+)
 from core.application import AuditService, DraftingService
 from core.domain.fsm import InvalidStateTransitionError, WorkflowFSM
 from core.domain.models import HumanSignature, WorkflowState
@@ -36,6 +38,26 @@ def main() -> None:
     target_words = st.sidebar.number_input("Palabras objetivo", 50, 10000, config.budget.target_words)
     tolerance = st.sidebar.slider("Tolerancia", 0.0, 0.9, config.budget.tolerance)
     template = st.sidebar.text_input("Nombre de plantilla", "Sección experimental")
+    st.sidebar.subheader("Modelo de redacción")
+    providers = ["Mock (offline)", *PROVIDER_PRESETS]
+    provider = st.sidebar.selectbox(
+        "Proveedor",
+        providers,
+        help="Los proveedores remotos usan una API compatible con OpenAI. La key solo vive en esta sesión.",
+    )
+    preset = PROVIDER_PRESETS.get(provider, {})
+    model = st.sidebar.text_input("Modelo", preset.get("model", ""))
+    base_url = st.sidebar.text_input(
+        "Endpoint (opcional)", preset.get("base_url", ""),
+        help="Puedes usar un gateway compatible, LM Studio, vLLM o un servidor local.",
+    )
+    api_key = ""
+    if provider not in {"Mock (offline)", "Local (Ollama)", "Local (LM Studio)"}:
+        api_key = st.sidebar.text_input("API key", type="password")
+    if provider == "Local (Ollama)":
+        st.sidebar.caption("Requiere Ollama activo y el modelo descargado localmente.")
+    elif provider == "Local (LM Studio)":
+        st.sidebar.caption("Activa el servidor local de LM Studio en el puerto indicado.")
     current_words = len(st.session_state.text.split())
     lower_bound = int(target_words * (1 - tolerance))
     upper_bound = int(target_words * (1 + tolerance))
@@ -81,12 +103,27 @@ def main() -> None:
             st.caption(hit.document.text[:400])
     with editor:
         instruction = st.text_area("Instrucción de sección", "Redacta una sección basada en la evidencia.", height=90)
-        if st.button("Redactar con MockLLM"):
-            result = DraftingService(MockLLMAdapter(), store, budget_tokens=int(target_words)).draft(instruction, query=query)
-            st.session_state.text = result.text
-            audit.record(WorkflowState.DRAFTING, "ui", "draft_generated",
-                         {"citations": [h.document.metadata for h in result.citations]},
-                         input_tokens=result.input_tokens, output_tokens=result.output_tokens)
+        if st.button(f"Redactar con {provider}"):
+            try:
+                llm = create_llm_adapter(
+                    provider, model=model, api_key=api_key, base_url=base_url
+                )
+                result = DraftingService(
+                    llm, store, budget_tokens=int(target_words)
+                ).draft(instruction, query=query)
+                st.session_state.text = result.text
+                audit.record(
+                    WorkflowState.DRAFTING, "LLM", "draft_generated",
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "text": result.text,
+                        "citations": [h.document.metadata for h in result.citations],
+                    },
+                    input_tokens=result.input_tokens, output_tokens=result.output_tokens,
+                )
+            except (RuntimeError, ValueError) as exc:
+                st.error(str(exc))
         edited = st.text_area("Editor", st.session_state.text, height=260)
         if edited != st.session_state.text:
             audit.record_human_edit(WorkflowState.DRAFTING, "HUMAN", st.session_state.text, edited)
