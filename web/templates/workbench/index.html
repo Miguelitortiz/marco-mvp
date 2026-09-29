@@ -1,0 +1,75 @@
+{% extends "workbench/base.html" %}
+{% block topbar_state %}
+  <span class="phase-dot"></span>{{ workbench.fsm.state.value }}
+  <span class="muted">{{ workbench.current_words }} palabras</span>
+{% endblock %}
+{% block content %}
+<section class="intro">
+  <p class="eyebrow">EXPEDIENTE CIENTÍFICO · {{ workbench.project_id }}</p>
+  <h1>Escribe con evidencia.<br><em>Revisa con criterio.</em></h1>
+  <p class="intro__copy">El editor es el centro del trabajo. Las fuentes, los controles y la firma aparecen cuando los necesitas.</p>
+</section>
+
+<section class="workspace-grid">
+  <article class="editor-column">
+    {% include "workbench/_editor.html" %}
+    {% include "workbench/_governance.html" %}
+  </article>
+  <aside class="context-column">
+    <details open class="panel">
+      <summary>Evidencia <span class="count">{{ workbench.hits|length }}</span></summary>
+      <div class="panel__body">
+        <form hx-post="{% url 'upload_documents' %}" hx-target="#evidence-panel" hx-encoding="multipart/form-data">
+          {% csrf_token %}
+          <label class="file-drop" for="documents">Añade PDF o texto</label>
+          <input id="documents" name="documents" type="file" multiple accept=".pdf,.txt">
+          <button class="button button--quiet" type="submit">Indexar documentos</button>
+        </form>
+        <form class="search" hx-post="{% url 'search_evidence' %}" hx-target="#evidence-panel">
+          {% csrf_token %}
+          <input name="query" value="{{ workbench.query }}" placeholder="Buscar evidencia">
+          <button aria-label="Buscar" type="submit">↗</button>
+        </form>
+        <div id="evidence-panel">{% include "workbench/_evidence.html" %}</div>
+      </div>
+    </details>
+    <details class="panel">
+      <summary>Configuración</summary>
+      <div class="panel__body">
+        <form class="settings" hx-post="{% url 'save_settings' %}" hx-target="#editor-panel">
+          {% csrf_token %}
+          <label>Sección<input name="template" value="{{ workbench.template }}"></label>
+          <label>Palabras objetivo<input name="target_words" type="number" value="{{ workbench.target_words }}" min="50"></label>
+          <label>Proveedor
+            <select name="provider">
+              {% for provider in providers %}<option {% if provider == workbench.provider %}selected{% endif %}>{{ provider }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>Modelo<input name="model" value="{{ workbench.model }}" placeholder="Predeterminado"></label>
+          <label>Endpoint<input name="base_url" value="{{ workbench.base_url }}" placeholder="Predeterminado"></label>
+          {% if workbench.provider != "Mock (offline)" and workbench.provider != "Local (Ollama)" and workbench.provider != "Local (LM Studio)" %}
+            <label>API key<input name="api_key" type="password" placeholder="Solo para esta sesión"></label>
+          {% endif %}
+          <button class="button button--quiet" type="submit">Guardar configuración</button>
+        </form>
+      </div>
+    </details>
+    <details class="panel">
+      <summary>Revisión y firma</summary>
+      <div class="panel__body">
+        <form hx-post="{% url 'advance_workflow' %}" hx-target="#workflow-status">
+          {% csrf_token %}
+          <label>Firma<input name="signer" value="investigador"></label>
+          <label>Decisión<select name="decision"><option>ACCEPTED</option><option>AMENDED</option><option>REJECTED</option></select></label>
+          <button class="button button--dark" type="submit">Firmar y avanzar</button>
+        </form>
+        <form hx-post="{% url 'rollback_workflow' %}" hx-target="#workflow-status" class="rollback">
+          {% csrf_token %}
+          <input type="hidden" name="target" value="CURATION">
+          <button class="button button--quiet" type="submit">Solicitar rollback a Curar</button>
+        </form>
+      </div>
+    </details>
+  </aside>
+</section>
+{% endblock %}

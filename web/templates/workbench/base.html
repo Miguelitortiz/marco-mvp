@@ -1,0 +1,31 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MARCO · Escritura científica{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'workbench.css' %}">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="wordmark" href="/">MARCO <span>/ laboratorio de escritura</span></a>
+    <div class="topbar__state" id="workflow-status">
+      {% block topbar_state %}{% endblock %}
+    </div>
+  </header>
+  <main class="shell">{% block content %}{% endblock %}</main>
+  <script>
+    document.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        const form = document.querySelector("#draft-form");
+        if (form) form.requestSubmit();
+      }
+    });
+    document.body.addEventListener("htmx:afterRequest", (event) => {
+      if (event.detail.successful) document.querySelector("textarea")?.focus();
+    });
+  </script>
+</body>
+</html>

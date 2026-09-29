@@ -1,0 +1,20 @@
+<details class="review-panel">
+  <summary>Controles de gobernanza <span class="muted">revisión secundaria</span></summary>
+  <div class="review-panel__body">
+    <form hx-post="{% url 'run_governance' %}" hx-target="#governance-panel">
+      {% csrf_token %}
+      <input type="hidden" name="text" value="{{ workbench.text }}">
+      <button class="button button--quiet" type="submit">Ejecutar controles</button>
+    </form>
+    <div id="governance-panel">
+      {% if workbench.last_governance %}
+        {% with l1=workbench.last_governance.0 l2=workbench.last_governance.1 %}
+          <div class="governance-grid">
+            <div><span class="label">Nivel 1</span><strong>{{ l1.score }}</strong><small>{{ l1.findings|length }} hallazgos</small></div>
+            <div><span class="label">Nivel 2</span><strong>{{ l2.score }}</strong><small>semáforo {{ l2.flag }}</small></div>
+          </div>
+        {% endwith %}
+      {% else %}<p class="empty">Los controles aparecerán después de ejecutar la revisión.</p>{% endif %}
+    </div>
+  </div>
+</details>

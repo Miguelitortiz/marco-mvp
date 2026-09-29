@@ -10,6 +10,7 @@ dominio (`core/domain`), casos de uso (`core/application`), puertos
 pip install -e ".[test]"
 pytest
 streamlit run ui/app.py  # opcional: pip install -e ".[ui]"
+python web/manage.py runserver  # interfaz web nativa: pip install -e ".[web]"
 ```
 
 El comando anterior funciona directamente desde el checkout. Si Streamlit
@@ -19,6 +20,23 @@ la raíz del repositorio (`cd marco-mvp`) o instala el proyecto en modo editable
 ```powershell
 python -m pip install -e ".[ui]"
 ```
+
+La interfaz web nativa se ejecuta con Django y templates HTML servidos por HTMX.
+El editor de escritura es la superficie principal; evidencia, gobernanza y
+firma aparecen como paneles contextuales. Usa los mismos servicios de
+indexación, recuperación, redacción, gobernanza, auditoría y FSM que la
+interfaz Streamlit, que se conserva como respaldo temporal:
+
+```powershell
+python -m pip install -e ".[web]"
+python web/manage.py migrate
+python web/manage.py runserver
+```
+
+La sesión web es local-first: el estado de trabajo vive en memoria del proceso
+y la trayectoria auditable continúa en `data/trajectory.jsonl`. HTMX se carga
+desde su distribución CDN para habilitar actualizaciones parciales sin una
+cadena de build JavaScript.
 
 El proveedor predeterminado es `MockLLMAdapter`; no descarga modelos ni hace
 llamadas de red. `HybridRAGStore` combina BM25 local con embeddings
