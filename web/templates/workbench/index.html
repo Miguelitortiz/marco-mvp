@@ -1,6 +1,6 @@
 {% extends "workbench/base.html" %}
 {% block topbar_state %}
-  <span class="phase-dot"></span>{{ workbench.fsm.state.value }}
+  <span class="phase-dot"></span>Paso {{ current_phase_number }} de {{ phases|length }}
   <span class="muted">{{ workbench.current_words }} palabras</span>
 {% endblock %}
 {% block content %}
@@ -25,38 +25,13 @@
   {% endfor %}
 </nav>
 
-<section class="intro">
-  <p class="eyebrow">PASO {{ current_phase_number }} DE {{ phases|length }} · {{ workbench.project_id }}</p>
-  <h1>{% if workbench.fsm.state.value == "PARAMETRIZATION" %}Prepara tu expediente.{% elif workbench.fsm.state.value == "CURATION" %}Construye tu base de evidencia.{% elif workbench.fsm.state.value == "DRAFTING" %}Redacta con respaldo.{% else %}Cierra un expediente auditable.{% endif %}</h1>
-  <p class="intro__copy">Avanza paso a paso. Escribe con evidencia cuando llegues a Redactar; cada etapa conserva lo que hiciste y puedes regresar a una etapa anterior cuando necesites corregir una decisión.</p>
-</section>
-
-<section class="guide-card">
-  <div>
-    <span class="guide-card__step">Ahora estás en {{ workbench.fsm.state.value }}</span>
-    <h2>{% for phase, label, description in phases %}{% if phase == workbench.fsm.state %}{{ label }}{% endif %}{% endfor %}</h2>
-    <p>{% for phase, label, description in phases %}{% if phase == workbench.fsm.state %}{{ description }}{% endif %}{% endfor %}</p>
-  </div>
-  <div class="guide-card__actions">
-    {% if workbench.fsm.state.value == "PARAMETRIZATION" %}
-      <span class="guide-card__hint">Completa la configuración y firma para habilitar Curar.</span>
-    {% elif workbench.fsm.state.value == "CURATION" %}
-      <span class="guide-card__hint">Indexa documentos, busca y registra al menos una inspección.</span>
-    {% elif workbench.fsm.state.value == "DRAFTING" %}
-      <span class="guide-card__hint">Genera, edita y ejecuta los controles antes de ensamblar.</span>
-    {% else %}
-      <span class="guide-card__hint">Revisa el expediente y firma el cierre auditable.</span>
-    {% endif %}
-  </div>
-</section>
-
 <section class="workspace-grid">
   {% if workbench.fsm.state.value == "PARAMETRIZATION" %}
     <article class="stage-card stage-card--wide">
       <div class="stage-card__heading">
-        <span class="eyebrow">Paso 1 · Preparar</span>
-        <h2>Define las reglas del documento</h2>
-        <p>Estas restricciones permanecerán activas durante todo el expediente.</p>
+        <span class="eyebrow">Preparar</span>
+        <h2>Reglas del documento</h2>
+        <p>Define las restricciones del expediente.</p>
       </div>
       <form class="settings stage-form" hx-post="{% url 'save_settings' %}" hx-target="#stage-feedback">
         {% csrf_token %}
@@ -77,9 +52,9 @@
   {% elif workbench.fsm.state.value == "CURATION" %}
     <article class="stage-card stage-card--wide" id="stage-content">
       <div class="stage-card__heading">
-        <span class="eyebrow">Paso 2 · Curar</span>
-        <h2>Reúne y valida tu evidencia</h2>
-        <p>Indexa el corpus, busca fragmentos relevantes y registra la inspección humana de al menos una fuente.</p>
+        <span class="eyebrow">Curar</span>
+        <h2>Fuentes y evidencia</h2>
+        <p>Indexa el corpus e inspecciona una fuente relevante.</p>
       </div>
       <form hx-post="{% url 'upload_documents' %}" hx-target="#stage-content" hx-encoding="multipart/form-data">
         {% csrf_token %}<label class="file-drop" for="documents">Añade PDF o texto</label>
@@ -95,9 +70,9 @@
   {% elif workbench.fsm.state.value == "DRAFTING" %}
     <article class="editor-column stage-card stage-card--wide">
       <div class="stage-card__heading">
-        <span class="eyebrow">Paso 3 · Redactar</span>
-        <h2>Construye y revisa el texto</h2>
-        <p>El borrador se genera únicamente con la evidencia que ya inspeccionaste.</p>
+        <span class="eyebrow">Redactar</span>
+        <h2>Texto de trabajo</h2>
+        <p>Genera y revisa el texto con la evidencia inspeccionada.</p>
       </div>
       {% include "workbench/_editor.html" %}
       {% include "workbench/_governance.html" %}
@@ -105,9 +80,9 @@
   {% else %}
     <article class="stage-card stage-card--wide">
       <div class="stage-card__heading">
-        <span class="eyebrow">Paso 4 · Ensamblar</span>
-        <h2>El expediente está listo para cerrar</h2>
-        <p>La trayectoria, las fuentes y las decisiones humanas quedan reunidas en el reporte de transparencia.</p>
+        <span class="eyebrow">Ensamblar</span>
+        <h2>Cierre del expediente</h2>
+        <p>Confirma el resumen y genera el reporte auditable.</p>
       </div>
       <dl class="assembly-summary">
         <div><dt>Palabras redactadas</dt><dd>{{ workbench.current_words }}</dd></div>
