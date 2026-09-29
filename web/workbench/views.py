@@ -92,6 +92,15 @@ def _fragment(request: HttpRequest, template: str, context: dict[str, object]) -
     return render(request, template, context)
 
 
+def _workflow_redirect(request: HttpRequest) -> HttpResponse:
+    """Reload the stage-specific screen after a state transition."""
+    if request.headers.get("HX-Request") == "true":
+        response = HttpResponse(status=204)
+        response["HX-Redirect"] = "/"
+        return response
+    return render(request, "workbench/index.html", _state(request).context())
+
+
 @require_http_methods(["GET"])
 def index(request: HttpRequest) -> HttpResponse:
     return render(request, "workbench/index.html", _state(request).context())
@@ -292,6 +301,8 @@ def advance_workflow(request: HttpRequest) -> HttpResponse:
             message = f"Avance firmado: {target.value}."
         except InvalidStateTransitionError as exc:
             message = str(exc)
+    if request.headers.get("HX-Request") == "true" and message.startswith("Avance firmado"):
+        return _workflow_redirect(request)
     return _fragment(request, "workbench/_status.html", {**workbench.context(), "message": message})
 
 
@@ -309,6 +320,8 @@ def export_workflow(request: HttpRequest) -> HttpResponse:
             {"events": report.get("events", 0), "word_count": workbench.current_words},
         )
         message = "Expediente ensamblado y reporte de transparencia registrado."
+    if request.headers.get("HX-Request") == "true" and message.startswith("Expediente ensamblado"):
+        return _workflow_redirect(request)
     return _fragment(request, "workbench/_status.html", {**workbench.context(), "message": message})
 
 
@@ -328,4 +341,6 @@ def rollback_workflow(request: HttpRequest) -> HttpResponse:
         message = f"Rollback aplicado: {previous.value} -> {target.value}."
     except InvalidStateTransitionError as exc:
         message = str(exc)
+    if request.headers.get("HX-Request") == "true" and message.startswith("Rollback aplicado"):
+        return _workflow_redirect(request)
     return _fragment(request, "workbench/_status.html", {**workbench.context(), "message": message})
