@@ -208,7 +208,7 @@ def save_settings(request: HttpRequest) -> HttpResponse:
          "tolerance": workbench.tolerance},
     )
     return _fragment(
-        request, "workbench/_editor.html",
+        request, "workbench/_notice.html",
         {**workbench.context(), "message": "Configuración guardada para esta sesión."},
     )
 
